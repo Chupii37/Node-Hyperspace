@@ -167,7 +167,7 @@ cleanup_old_models() {
 download_random_model() {
   echo -e "${BLUE}Mendapatkan daftar model yang tersedia...${NC}"
   
-  # Mendapatkan daftar model yang tersedia
+  # Mendapatkan daftar model yang tersedia setelah kontainer siap
   available_models=$(docker exec aios-container /app/aios-cli models available)
   
   # Memeriksa apakah ada model yang tersedia
@@ -236,7 +236,7 @@ main() {
   wait_for_container_ready
   download_model "kartikhyper/aios"
   cleanup_old_models
-  download_random_model
+  download_random_model  # Pastikan model telah tersedia sebelum mencoba mendownload
   run_inference
   import_private_key_to_hive
   select_hive_tier

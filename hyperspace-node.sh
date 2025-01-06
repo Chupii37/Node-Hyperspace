@@ -9,138 +9,215 @@ BLUE='\033[0;34m'
 WHITE='\033[1;37m'
 NC='\033[0m'  # Tanpa warna (reset)
 
-# Menampilkan Logo
-echo -e "${CYAN}SHOWING ANIANI!!!${NC}"
+# Direktori model dan status pengunduhan
+MODEL_DIR="/root/models"
+STATUS_FILE="/root/status.txt"
+LOG_FILE="/root/log.txt"
+MAX_DOWNLOAD_TIME=3600  # Batas waktu pengunduhan model dalam detik (1 jam)
 
-# Mengunduh dan menjalankan Logo.sh (Menambahkan verifikasi)
-echo -e "${BLUE}📥 Mengunduh dan memeriksa Logo.sh...${NC}"
-wget https://raw.githubusercontent.com/Chupii37/Chupii-Node/refs/heads/main/Logo.sh -O Logo.sh
-if [[ $? -ne 0 ]]; then
-    echo -e "${RED}❌ Gagal mengunduh Logo.sh.${NC}"
-    exit 1
-fi
-cat Logo.sh  # Verifikasi konten skrip
-bash Logo.sh  # Menjalankan Logo.sh
+# Membuat direktori untuk menyimpan model jika belum ada
+mkdir -p "$MODEL_DIR"
 
-# Meminta input private key
-echo -e "${CYAN}Masukkan private key Anda:${NC}"
-read private_key
+# Langkah pertama: hanya dijalankan sekali, bukan diulang
+setup_environment() {
+  # Menampilkan Logo
+  echo -e "${CYAN}SHOWING ANIANI!!!${NC}"
 
-# Memuat ulang konfigurasi bashrc untuk memastikan lingkungan terbaru
-echo -e "${BLUE}Memuat ulang .bashrc...${NC}"
-source /root/.bashrc
+  # Mengunduh dan memeriksa Logo.sh (Menambahkan verifikasi)
+  echo -e "${BLUE}📥 Mengunduh dan memeriksa Logo.sh...${NC}"
+  wget https://raw.githubusercontent.com/Chupii37/Chupii-Node/refs/heads/main/Logo.sh -O Logo.sh
+  if [[ $? -ne 0 ]]; then
+      echo -e "${RED}❌ Gagal mengunduh Logo.sh.${NC}"
+      exit 1
+  fi
+  cat Logo.sh  # Verifikasi konten skrip
+  bash Logo.sh  # Menjalankan Logo.sh
 
-# Simpan private key ke file sementara
-echo "$private_key" > /root/my.pem
+  # Memastikan sistem terupdate
+  echo -e "${BLUE}Memastikan sistem sudah terupdate...${NC}"
+  apt update -y && apt upgrade -y
 
-# Mengubah izin file private key
-echo -e "${CYAN}Mengubah izin file private key menjadi 600...${NC}"
-chmod 600 /root/my.pem
+  # Memastikan Docker sudah terinstal
+  if ! command -v docker &> /dev/null; then
+    echo -e "${RED}Docker tidak ditemukan. Menginstal Docker...${NC}"
+    # Instalasi Docker
+    apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+    apt update -y
+    apt install -y docker-ce
+    # Menjalankan Docker agar berjalan setelah instalasi
+    systemctl start docker
+    systemctl enable docker
+  else
+    echo -e "${GREEN}Docker sudah terinstal!${NC}"
+  fi
 
-# File lock untuk mencegah tumpang tindih
-LOCK_FILE="/root/aios-script.lock"
+  # Menarik image Docker kartikhyper/aios
+  echo -e "${BLUE}Menarik image Docker kartikhyper/aios...${NC}"
+  docker pull kartikhyper/aios
 
-# Memeriksa apakah skrip sedang berjalan (tumpang tindih)
-if [ -e "$LOCK_FILE" ]; then
-  echo -e "${YELLOW}Skrip sudah berjalan. Menunggu proses selesai...${NC}"
-  exit 0  # Skrip sudah berjalan, keluar
-else
-  # Membuat file lock untuk menunjukkan skrip sedang berjalan
-  touch "$LOCK_FILE"
-fi
+  # Memeriksa apakah kontainer Docker sudah berjalan atau belum
+  container_running=$(docker ps -q -f name=aios-container)
 
-# Menarik image Docker kartikhyper/aios
-echo -e "${BLUE}Menarik image Docker kartikhyper/aios...${NC}"
-docker pull kartikhyper/aios
+  if [ -z "$container_running" ]; then
+    # Jika kontainer belum berjalan, mulai kontainer baru dengan auto restart
+    echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
+    docker run -d --restart unless-stopped --name aios-container -v /root:/root kartikhyper/aios bash -c "
+      # Memulai daemon dalam kontainer Docker
+      echo 'Memulai daemon...'
+      aios-cli start
+    "
+  else
+    echo -e "${GREEN}Kontainer sudah berjalan. Melanjutkan proses selanjutnya...${NC}"
+  fi
+}
 
-# Memeriksa apakah kontainer Docker sudah berjalan atau belum
-container_running=$(docker ps -q -f name=aios-container)
+# Fungsi untuk mengunduh model dengan verifikasi dan melanjutkan ke model lain jika gagal dalam 1 jam
+download_model() {
+  local model_name=$1
+  local start_time
+  local elapsed_time
 
-if [ -z "$container_running" ]; then
-  # Jika kontainer belum berjalan, mulai kontainer baru dengan auto restart
-  echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
-  docker run -d --restart unless-stopped --name aios-container -v /root:/root kartikhyper/aios bash -c "
-    # Memulai daemon dalam kontainer Docker
-    echo 'Memulai daemon...'
-    aios-cli start
-  "
-else
-  echo -e "${GREEN}Kontainer sudah berjalan. Melanjutkan proses selanjutnya...${NC}"
-fi
+  echo -e "${BLUE}📥 Mengunduh model $model_name...${NC}"
+  
+  # Melacak waktu mulai pengunduhan
+  start_time=$(date +%s)
+  
+  # Tandai model yang sedang diunduh
+  echo "$model_name sedang diunduh" > "$STATUS_FILE"
+  
+  # Mengunduh model
+  docker pull "$model_name" &>> "$LOG_FILE"
+  
+  # Mengecek apakah pengunduhan selesai dengan benar
+  if [[ $? -eq 0 ]]; then
+    echo -e "${GREEN}Model $model_name berhasil diunduh!${NC}"
+    # Tandai pengunduhan selesai
+    rm -f "$STATUS_FILE"
+    return 0  # Pengunduhan berhasil
+  fi
+  
+  # Cek apakah waktu pengunduhan melebihi 1 jam
+  elapsed_time=$(( $(date +%s) - start_time ))
+  
+  if [[ $elapsed_time -ge $MAX_DOWNLOAD_TIME ]]; then
+    echo -e "${RED}Waktu pengunduhan model $model_name melebihi batas 1 jam. Model ini dilewatkan...${NC}"
+    rm -f "$STATUS_FILE"  # Hapus status pengunduhan
+    return 1  # Gagal dalam 1 jam, lewati model ini
+  else
+    echo -e "${RED}Pengunduhan model $model_name gagal. Model ini dilewatkan...${NC}"
+    rm -f "$STATUS_FILE"  # Hapus status pengunduhan
+    return 1  # Gagal, lewati model ini
+  fi
+}
 
-# Melanjutkan skrip dari sini
-echo -e "${BLUE}Menjalankan proses lainnya...${NC}"
+# Fungsi untuk menghapus model yang sudah lebih dari 6 jam
+cleanup_old_models() {
+  echo -e "${BLUE}Mengecek model yang sudah lebih dari 6 jam...${NC}"
+  current_time=$(date +%s)
 
-# Mendapatkan daftar model yang tersedia
-echo -e "${BLUE}Mendapatkan daftar model yang tersedia...${NC}"
-available_models=$(docker exec aios-container aios-cli models available)
+  for model in "$MODEL_DIR"/*; do
+    if [ -f "$model" ]; then
+      model_time=$(stat --format=%Y "$model")
+      let "age=$current_time-$model_time"
+      let "age_in_hours=$age/3600"
+      
+      if [ "$age_in_hours" -ge 6 ]; then
+        echo -e "${RED}Menghapus model $model yang sudah lebih dari 6 jam...${NC}"
+        rm -rf "$model"
+      fi
+    fi
+  done
+}
 
-# Menyaring model dari output dan mengambil hanya nama model (disesuaikan dengan format output)
-models=($(echo "$available_models" | grep 'model:' | awk '{print $2}'))
+# Fungsi untuk mendownload model acak setiap jam
+download_random_model() {
+  echo -e "${BLUE}Mendapatkan daftar model yang tersedia...${NC}"
+  available_models=$(docker exec aios-container aios-cli models available)
 
-# Memilih model secara acak dari daftar model
-selected_model=${models[$RANDOM % ${#models[@]}]}
+  # Menyaring model dan memilih model acak
+  models=($(echo "$available_models" | grep 'model:' | awk '{print $2}'))
+  selected_model=${models[$RANDOM % ${#models[@]}]}
 
-# Daftar prompt yang berbeda yang akan digunakan untuk setiap model
-prompts=(
-  "Can you explain how to write an HTTP server in Rust?"
-  "What are the best practices for containerizing applications with Docker?"
-  "Explain the concept of async/await in programming."
-  "How does machine learning work and what are its applications?"
-  "What is quantum computing and how does it differ from classical computing?"
-)
+  echo -e "${GREEN}Menarik model $selected_model...${NC}"
 
-# Memilih prompt secara acak dari daftar prompt
-selected_prompt=${prompts[$RANDOM % ${#prompts[@]}]}
+  # Menyimpan model yang dipilih ke direktori
+  docker exec aios-container aios-cli models add "$selected_model"
+  docker exec aios-container aios-cli save-model "$selected_model" "$MODEL_DIR/$selected_model"
 
-# Menambahkan model yang dipilih secara lokal
-echo -e "${GREEN}Menambahkan model $selected_model secara lokal...${NC}"
-docker exec aios-container aios-cli models add "$selected_model"
+  echo -e "${CYAN}Model $selected_model berhasil diunduh!${NC}"
+}
 
-# Menjalankan inferensi lokal dengan model yang dipilih dan prompt yang sesuai
-echo -e "${CYAN}Menjalankan inferensi dengan model $selected_model dan prompt: $selected_prompt...${NC}"
-docker exec aios-container aios-cli infer --model "$selected_model" --prompt "$selected_prompt"
+# Fungsi untuk menjalankan inferensi dengan prompt dan model yang dipilih
+run_inference() {
+  # Daftar prompt yang berbeda yang akan digunakan untuk setiap model
+  prompts=(
+    "Can you explain how to write an HTTP server in Rust?"
+    "What are the best practices for containerizing applications with Docker?"
+    "Explain the concept of async/await in programming."
+    "How does machine learning work and what are its applications?"
+    "What is quantum computing and how does it differ from classical computing?"
+  )
 
-# Mengimpor private key ke hive
-echo -e "${CYAN}Mengimpor private key ke hive...${NC}"
-docker exec aios-container aios-cli hive import-keys /root/my.pem
+  # Memilih prompt secara acak dari daftar prompt
+  selected_prompt=${prompts[$RANDOM % ${#prompts[@]}]}
+  echo -e "${BLUE}Menggunakan prompt: '$selected_prompt' untuk model $selected_model...${NC}"
 
-# Login ke hive menggunakan kunci yang diimpor
-echo -e "${CYAN}Login ke hive...${NC}"
-docker exec aios-container aios-cli hive login
+  # Menjalankan inferensi dengan model yang dipilih dan prompt yang sesuai
+  docker exec aios-container aios-cli infer --model "$selected_model" --prompt "$selected_prompt"
+}
 
-# Menampilkan model yang dibutuhkan untuk tier tertentu
-echo -e "${BLUE}Menampilkan model yang dibutuhkan untuk tier 4...${NC}"
-docker exec aios-container aios-cli hive select-tier 4
+# Fungsi untuk mengimpor private key ke Hive dan login
+import_private_key_to_hive() {
+  echo -e "${CYAN}Mengimpor private key ke hive...${NC}"
+  docker exec aios-container aios-cli hive import-keys /root/my.pem
 
-# Menghubungkan ke jaringan untuk menyediakan inferensi
-echo -e "${BLUE}Menghubungkan ke jaringan...${NC}"
-docker exec aios-container aios-cli hive connect
+  echo -e "${CYAN}Login ke hive...${NC}"
+  docker exec aios-container aios-cli hive login
+}
 
-# Menjalankan inferensi melalui orang lain di jaringan (menggunakan model yang sama)
-echo -e "${BLUE}Menjalankan inferensi melalui jaringan dengan model yang sama...${NC}"
-docker exec aios-container aios-cli hive infer --model "$selected_model" --prompt "$selected_prompt"
+# Fungsi untuk menampilkan model yang dibutuhkan untuk tier tertentu
+select_hive_tier() {
+  echo -e "${BLUE}Menampilkan model yang dibutuhkan untuk tier 4...${NC}"
+  docker exec aios-container aios-cli hive select-tier 4
+}
 
-# Shortcut untuk memulai dan login/connect ke jaringan untuk hosting model lokal
-echo -e "${CYAN}Memulai dan login/connect ke jaringan untuk hosting model lokal...${NC}"
-docker exec aios-container aios-cli start --connect
+# Fungsi untuk menghubungkan ke jaringan Hive
+connect_to_hive_network() {
+  echo -e "${BLUE}Menghubungkan ke jaringan...${NC}"
+  docker exec aios-container aios-cli hive connect
+}
 
-echo -e "${GREEN}Proses selesai!${NC}"
+# Fungsi untuk menjalankan inferensi melalui jaringan Hive
+run_network_inference() {
+  echo -e "${BLUE}Menjalankan inferensi melalui jaringan dengan model yang sama...${NC}"
+  docker exec aios-container aios-cli hive infer --model "$selected_model" --prompt "$selected_prompt"
+}
 
-# Menambahkan cron job untuk menghapus model setiap 24 jam
-echo -e "${CYAN}Menambahkan cron job untuk menghapus model setiap 24 jam...${NC}"
-if [ ! -f /root/cron_job_installed ]; then
-  # Cron job untuk menghapus model setiap 24 jam
-  echo '0 0 * * * docker exec aios-container aios-cli models remove --all' > /etc/cron.d/delete-models
-  chmod 0644 /etc/cron.d/delete-models
-  touch /root/cron_job_installed  # Tandai bahwa cron job telah ditambahkan
-fi
+# Langkah pertama hanya sekali dijalankan
+setup_environment
 
-# Memulai layanan cron
-echo -e "${CYAN}Memulai layanan cron...${NC}"
-service cron start
+# Menjalankan proses setiap jam setelah setup selesai
+while true; do
+  # Membersihkan model yang sudah lebih dari 6 jam
+  cleanup_old_models
+  
+  # Mengunduh model acak
+  download_random_model
+  
+  # Mengimpor private key ke Hive dan login
+  import_private_key_to_hive
+  
+  # Menampilkan model untuk tier 4
+  select_hive_tier
+  
+  # Menghubungkan ke jaringan Hive
+  connect_to_hive_network
+  
+  # Menjalankan inferensi melalui jaringan Hive
+  run_network_inference
 
-# Menghapus file lock setelah skrip selesai
-rm -f "$LOCK_FILE"
-
-echo -e "${GREEN}Cron job berhasil dijadwalkan untuk menghapus model setiap 24 jam.${NC}"
+  # Menunggu 1 jam sebelum mengunduh model berikutnya
+  sleep 3600  # 1 jam
+done

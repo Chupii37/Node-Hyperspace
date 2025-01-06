@@ -76,14 +76,39 @@ pull_and_run_docker() {
     echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
     docker run -d --restart unless-stopped --name aios-container -v /root:/root kartikhyper/aios bash -c "
       echo 'Memulai daemon...'
-      aios-cli start
+      /app/aios-cli start
     "
   else
     echo -e "${GREEN}Kontainer sudah berjalan.${NC}"
   fi
 }
 
-# Fungsi untuk mengunduh model dengan pengecekan waktu pengunduhan
+# Fungsi untuk menunggu kontainer siap, dengan batas waktu
+wait_for_container_ready() {
+  MAX_WAIT_TIME=300  # Batas waktu maksimal 5 menit (300 detik)
+  WAIT_INTERVAL=10   # Interval pengecekan setiap 10 detik
+  ELAPSED_TIME=0
+
+  while true; do
+    container_status=$(docker inspect --format '{{.State.Status}}' aios-container)
+    
+    if [[ "$container_status" == "running" ]]; then
+      echo -e "${GREEN}Kontainer sudah siap.${NC}"
+      break
+    fi
+
+    if [[ $ELAPSED_TIME -ge $MAX_WAIT_TIME ]]; then
+      echo -e "${RED}Kontainer gagal untuk memulai dalam waktu yang ditentukan (${MAX_WAIT_TIME} detik).${NC}"
+      exit 1
+    fi
+
+    echo -e "${YELLOW}Kontainer masih dalam status '$container_status', menunggu... (${ELAPSED_TIME}/${MAX_WAIT_TIME} detik)${NC}"
+    sleep $WAIT_INTERVAL
+    ELAPSED_TIME=$((ELAPSED_TIME + WAIT_INTERVAL))
+  done
+}
+
+# Mengunduh model dengan pengecekan waktu pengunduhan
 download_model() {
   local model_name=$1
   local start_time
@@ -141,53 +166,53 @@ cleanup_old_models() {
 # Fungsi untuk mendownload model acak
 download_random_model() {
   echo -e "${BLUE}Mendapatkan daftar model yang tersedia...${NC}"
-  available_models=$(docker exec aios-container aios-cli models available)
+  available_models=$(docker exec aios-container /app/aios-cli models available)
   models=($(echo "$available_models" | grep 'model:' | awk '{print $2}'))
   selected_model=${models[$RANDOM % ${#models[@]}]}
 
   echo -e "${GREEN}Menarik model $selected_model...${NC}"
-  docker exec aios-container aios-cli models add "$selected_model"
-  docker exec aios-container aios-cli save-model "$selected_model" "$MODEL_DIR/$selected_model"
+  docker exec aios-container /app/aios-cli models add "$selected_model"
+  docker exec aios-container /app/aios-cli save-model "$selected_model" "$MODEL_DIR/$selected_model"
 }
 
 # Menjalankan inferensi dengan model dan prompt
 run_inference() {
-  prompts=(
-    "Can you explain how to write an HTTP server in Rust?"
-    "What are the best practices for containerizing applications with Docker?"
+  prompts=( 
+    "Can you explain how to write an HTTP server in Rust?" 
+    "What are the best practices for containerizing applications with Docker?" 
     "Explain async/await in programming."
   )
 
   selected_prompt=${prompts[$RANDOM % ${#prompts[@]}]}
   echo -e "${BLUE}Menggunakan prompt: '$selected_prompt' untuk model $selected_model...${NC}"
-  docker exec aios-container aios-cli infer --model "$selected_model" --prompt "$selected_prompt"
+  docker exec aios-container /app/aios-cli infer --model "$selected_model" --prompt "$selected_prompt"
 }
 
 # Mengimpor private key ke Hive dan login
 import_private_key_to_hive() {
   echo -e "${CYAN}Mengimpor private key ke Hive...${NC}"
-  docker exec aios-container aios-cli hive import-keys /root/my.pem
+  docker exec aios-container /app/aios-cli hive import-keys /root/my.pem
 
   echo -e "${CYAN}Login ke Hive...${NC}"
-  docker exec aios-container aios-cli hive login
+  docker exec aios-container /app/aios-cli hive login
 }
 
 # Menampilkan model yang dibutuhkan untuk tier tertentu (misalnya, tier 4)
 select_hive_tier() {
   echo -e "${BLUE}Menampilkan model yang dibutuhkan untuk tier 4...${NC}"
-  docker exec aios-container aios-cli hive select-tier 4
+  docker exec aios-container /app/aios-cli hive select-tier 4
 }
 
 # Menghubungkan ke jaringan Hive
 connect_to_hive_network() {
   echo -e "${BLUE}Menghubungkan ke jaringan Hive...${NC}"
-  docker exec aios-container aios-cli hive connect
+  docker exec aios-container /app/aios-cli hive connect
 }
 
 # Fungsi untuk menjalankan inferensi melalui jaringan Hive
 run_network_inference() {
   echo -e "${BLUE}Menjalankan inferensi melalui jaringan dengan model yang sama...${NC}"
-  docker exec aios-container aios-cli hive infer --model "$selected_model" --prompt "$selected_prompt"
+  docker exec aios-container /app/aios-cli hive infer --model "$selected_model" --prompt "$selected_prompt"
 }
 
 # Fungsi utama untuk menjalankan proses secara berkelanjutan
@@ -197,21 +222,16 @@ main() {
   get_private_key
   check_and_install_docker
   pull_and_run_docker
-
-  # Menjalankan proses secara berkelanjutan
-  while true; do
-    cleanup_old_models  # Memanggil fungsi ini untuk membersihkan model
-    download_random_model
-    run_inference
-
-    # Hive Related Processes
-    import_private_key_to_hive
-    select_hive_tier
-    connect_to_hive_network
-    run_network_inference
-
-    sleep 3600  # Tunggu 1 jam sebelum menjalankan ulang
-  done
+  wait_for_container_ready
+  download_model "kartikhyper/aios"
+  cleanup_old_models
+  download_random_model
+  run_inference
+  import_private_key_to_hive
+  select_hive_tier
+  connect_to_hive_network
+  run_network_inference
 }
 
+# Jalankan skrip utama
 main

@@ -80,8 +80,8 @@ pull_and_run_docker() {
   container_running=$(docker ps -q -f name=aios-container)
   if [ -z "$container_running" ]; then
     echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
-    # Hapus --restart unless-stopped untuk menghindari auto-restart
-    docker run -d --name aios-container -v /root:/root kartikhyper/aios bash
+    # Mengubah perintah docker run untuk memastikan kontainer tetap berjalan
+    docker run -d --name aios-container -v /root:/root kartikhyper/aios /bin/bash -c "while true; do sleep 3600; done"
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}❌ Gagal menjalankan kontainer Docker.${NC}"
         exit 1

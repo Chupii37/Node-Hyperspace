@@ -166,10 +166,21 @@ cleanup_old_models() {
 # Fungsi untuk mendownload model acak
 download_random_model() {
   echo -e "${BLUE}Mendapatkan daftar model yang tersedia...${NC}"
+  
+  # Mendapatkan daftar model yang tersedia
   available_models=$(docker exec aios-container /app/aios-cli models available)
+  
+  # Memeriksa apakah ada model yang tersedia
   models=($(echo "$available_models" | grep 'model:' | awk '{print $2}'))
+  
+  # Mengecek apakah ada model dalam daftar
+  if [ ${#models[@]} -eq 0 ]; then
+    echo -e "${RED}Tidak ada model yang tersedia. Gagal memilih model acak.${NC}"
+    exit 1  # Keluar jika tidak ada model yang ditemukan
+  fi
+  
   selected_model=${models[$RANDOM % ${#models[@]}]}
-
+  
   echo -e "${GREEN}Menarik model $selected_model...${NC}"
   docker exec aios-container /app/aios-cli models add "$selected_model"
   docker exec aios-container /app/aios-cli save-model "$selected_model" "$MODEL_DIR/$selected_model"

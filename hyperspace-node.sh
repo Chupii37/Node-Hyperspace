@@ -85,7 +85,7 @@ pull_and_run_docker() {
 
 # Fungsi untuk menunggu kontainer siap, dengan batas waktu
 wait_for_container_ready() {
-  MAX_WAIT_TIME=300  # Batas waktu maksimal 5 menit (300 detik)
+  MAX_WAIT_TIME=3600  # Batas waktu maksimal 1 jam (3600 detik)
   WAIT_INTERVAL=10   # Interval pengecekan setiap 10 detik
   ELAPSED_TIME=0
 

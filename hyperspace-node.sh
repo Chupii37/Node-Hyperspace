@@ -134,6 +134,15 @@ pull_and_run_docker() {
         exit 1
     fi
     echo -e "${GREEN}Infer Hive berhasil dijalankan.${NC}"
+
+    # Menambahkan langkah untuk memeriksa multiplier dan points
+    echo -e "${BLUE}Memeriksa multiplier dan poin Hive...${NC}"
+    docker exec -it aios-container /app/aios-cli hive points
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}❌ Gagal memeriksa multiplier dan poin Hive.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}Poin dan multiplier Hive berhasil diperiksa.${NC}"
   fi
 }
 

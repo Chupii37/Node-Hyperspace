@@ -55,7 +55,7 @@ check_and_install_docker() {
   if ! command -v docker &> /dev/null; then
     echo -e "${RED}Docker tidak ditemukan. Menginstal Docker...${NC}"
     apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - 
     add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
     apt update -y
     apt install -y docker-ce
@@ -70,7 +70,7 @@ check_and_install_docker() {
 pull_and_run_docker() {
   echo -e "${BLUE}Menarik image Docker kartikhyper/aios...${NC}"
   docker pull kartikhyper/aios
-  
+
   container_running=$(docker ps -q -f name=aios-container)
   if [ -z "$container_running" ]; then
     echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
@@ -94,13 +94,13 @@ download_model() {
   start_time=$(date +%s)
   echo "$model_name sedang diunduh" > "$STATUS_FILE"
   docker pull "$model_name" &>> "$LOG_FILE"
-  
+
   if [[ $? -eq 0 ]]; then
     echo -e "${GREEN}Model $model_name berhasil diunduh!${NC}"
     rm -f "$STATUS_FILE"
     return 0  # Pengunduhan berhasil
   fi
-  
+
   elapsed_time=$(( $(date +%s) - start_time ))
   if [[ $elapsed_time -ge $MAX_DOWNLOAD_TIME ]]; then
     echo -e "${RED}Waktu pengunduhan model $model_name melebihi batas 1 jam. Model ini dilewatkan...${NC}"
@@ -122,11 +122,17 @@ cleanup_old_models() {
     if [ -f "$model" ]; then
       model_time=$(stat --format=%Y "$model")
       let "age=$current_time-$model_time"
-      let "age_in_hours=$age/3600"
       
-      if [ "$age_in_hours" -ge 6 ]; then
-        echo -e "${RED}Menghapus model $model yang sudah lebih dari 6 jam...${NC}"
-        rm -rf "$model"
+      # Pastikan age tidak nol sebelum dibagi
+      if [ "$age" -gt 0 ]; then
+        let "age_in_hours=$age/3600"
+        
+        if [ "$age_in_hours" -ge 6 ]; then
+          echo -e "${RED}Menghapus model $model yang sudah lebih dari 6 jam...${NC}"
+          rm -rf "$model"
+        fi
+      else
+        echo -e "${YELLOW}Model $model baru saja dibuat atau tidak valid untuk penghapusan.${NC}"
       fi
     fi
   done
@@ -161,7 +167,7 @@ run_inference() {
 import_private_key_to_hive() {
   echo -e "${CYAN}Mengimpor private key ke Hive...${NC}"
   docker exec aios-container aios-cli hive import-keys /root/my.pem
-  
+
   echo -e "${CYAN}Login ke Hive...${NC}"
   docker exec aios-container aios-cli hive login
 }
@@ -191,10 +197,10 @@ main() {
   get_private_key
   check_and_install_docker
   pull_and_run_docker
-  
+
   # Menjalankan proses secara berkelanjutan
   while true; do
-    cleanup_old_models
+    cleanup_old_models  # Memanggil fungsi ini untuk membersihkan model
     download_random_model
     run_inference
 
@@ -203,7 +209,7 @@ main() {
     select_hive_tier
     connect_to_hive_network
     run_network_inference
-    
+
     sleep 3600  # Tunggu 1 jam sebelum menjalankan ulang
   done
 }

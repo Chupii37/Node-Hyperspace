@@ -4,16 +4,21 @@
 CYAN='\033[0;36m'
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-WHITE='\033[1;37m'
 NC='\033[0m'  # Tanpa warna (reset)
 
 echo -e "${CYAN}SHOWING ANIANI!!!${NC}"
 
 # Fungsi untuk menunggu input atau konfirmasi pengguna
-wait_for_user() {
-  read -p "Tekan [Enter] untuk melanjutkan..."
+ask_user_confirmation() {
+  while true; do
+    read -p "$1 (yes/no): " answer
+    case "$answer" in
+      [Yy]* ) return 0 ;;  # Jika jawabannya 'yes' atau variasi lainnya, lanjutkan.
+      [Nn]* ) echo -e "${RED}❌ Proses dibatalkan.${NC}" && exit 1 ;;  # Jika jawabannya 'no' atau variasi lainnya, batalkan.
+      * ) echo -e "${RED}Input tidak valid. Harap ketik 'yes' atau 'no'.${NC}" ;;  # Jika input tidak valid, beri tahu dan minta input ulang.
+    esac
+  done
 }
 
 # Mengunduh dan memeriksa Logo.sh
@@ -24,7 +29,6 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 cat Logo.sh  # Verifikasi konten skrip
-wait_for_user  # Tunggu konfirmasi untuk melanjutkan
 bash Logo.sh  # Menjalankan Logo.sh
 
 # Update sistem
@@ -35,14 +39,11 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 echo -e "${GREEN}Sistem berhasil diperbarui.${NC}"
-wait_for_user
 
 # Meminta input private key dan menyimpannya
 get_private_key() {
   echo -e "${CYAN}Silakan masukkan private key...${NC}"
   read -p "Masukkan private key: " private_key
-
-  # Menyimpan private key ke file my.pem dan atur hak akses
   echo -e "$private_key" > ./my.pem
   chmod 600 ./my.pem
   echo -e "${GREEN}Private key telah disimpan dengan nama my.pem dan hak akses sudah diatur.${NC}"
@@ -67,7 +68,6 @@ check_and_install_docker() {
   else
     echo -e "${GREEN}Docker sudah terinstal!${NC}"
   fi
-  wait_for_user
 }
 
 # Menarik dan menjalankan kontainer Docker
@@ -79,50 +79,59 @@ pull_and_run_docker() {
     exit 1
   fi
   echo -e "${GREEN}Image Docker berhasil diunduh.${NC}"
-  wait_for_user
 
   container_running=$(docker ps -q -f name=aios-container)
   if [ -z "$container_running" ]; then
     echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
-    docker run -d --restart unless-stopped --name aios-container -v /root:/root kartikhyper/aios bash -c "
-      echo 'Memulai daemon...'
-    
-      # Start the actual daemon
-      /app/aios-cli start
-
-      # See what models are available
-      /app/aios-cli models available
-
-      # Install one of them locally
-      /app/aios-cli models add hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf
-
-      # Run a local inference using it
-      /app/aios-cli infer --model hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf --prompt 'Can you explain how to write an HTTP server in Rust?'
-
-      # Import your private key from a .pem or .base58 file
-      /app/aios-cli hive import-keys ./my.pem
-
-      # Set those keys as the preferred keys for this session
-      /app/aios-cli hive login
-
-      # Run this to see what models are required
-      /app/aios-cli hive select-tier 4
-
-      # Connect to the network (now providing inference for the model you installed before)
-      /app/aios-cli hive connect
-
-      # Run an inference through someone else on the network (as you can see it's the exact same format as the normal `infer` just prefixed with `hive`)
-      /app/aios-cli hive infer --model hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf --prompt 'Can you explain how to write an HTTP server in Rust?'
-    "
+    docker run -d --restart unless-stopped --name aios-container -v /root:/root kartikhyper/aios bash
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}❌ Gagal menjalankan kontainer Docker.${NC}"
         exit 1
     fi
     echo -e "${GREEN}Kontainer Docker berhasil dijalankan.${NC}"
-  else
-    echo -e "${GREEN}Kontainer Docker sudah berjalan.${NC}"
+
+    # Masuk ke dalam kontainer dan mulai daemon
+    echo -e "${BLUE}Masuk ke dalam kontainer dan memulai daemon...${NC}"
+    docker exec -it aios-container bash -c "
+      echo 'Memulai daemon...'
+      /app/aios-cli start
+      /app/aios-cli models available
+      /app/aios-cli models add hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf
+      # Menunggu konfirmasi pengguna untuk menjalankan infer
+      echo -e '${CYAN}Apakah Anda ingin menjalankan infer dengan model yang telah diinstal?${NC}'
+      ask_user_confirmation 'Apakah Anda ingin menjalankan infer dengan model yang telah diinstal?'
+      echo -e '${BLUE}Menjalankan infer menggunakan model yang telah diinstal...${NC}'
+      docker exec -it aios-container /app/aios-cli infer --model hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf --prompt 'Can you explain how to write an HTTP server in Rust?'
+      if [[ \$? -ne 0 ]]; then
+        echo -e '${RED}❌ Gagal menjalankan infer.${NC}'
+        exit 1
+      fi
+      echo -e '${GREEN}Infer berhasil dijalankan.${NC}'
+      /app/aios-cli hive import-keys ./my.pem
+      /app/aios-cli hive login
+      /app/aios-cli hive select-tier 4
+      /app/aios-cli hive connect
+      # Menunggu konfirmasi pengguna untuk menjalankan infer melalui hive
+      echo -e '${CYAN}Apakah Anda ingin menjalankan infer dengan Hive menggunakan model yang telah diinstal?${NC}'
+      ask_user_confirmation 'Apakah Anda ingin menjalankan infer dengan Hive menggunakan model yang telah diinstal?'
+      echo -e '${BLUE}Menjalankan infer Hive menggunakan model yang telah diinstal...${NC}'
+      docker exec -it aios-container /app/aios-cli hive infer --model hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf --prompt 'Can you explain how to write an HTTP server in Rust?'
+      if [[ \$? -ne 0 ]]; then
+        echo -e '${RED}❌ Gagal menjalankan infer Hive.${NC}'
+        exit 1
+      fi
+      echo -e '${GREEN}Infer Hive berhasil dijalankan.${NC}'
+
+      # Tunggu 20 detik sebelum keluar dari dalam kontainer
+      echo -e '${BLUE}Menunggu 20 detik sebelum keluar dari kontainer...${NC}'
+      sleep 20
+
+      # Keluar dari dalam kontainer dan pastikan Docker tetap berjalan
+      echo -e '${BLUE}Keluar dari kontainer dan memastikan Docker tetap berjalan...${NC}'
+      docker exec -it aios-container bash -c 'exit'
+      docker start aios-container
+    "
   fi
-  wait_for_user
 }
 
 # Menjalankan fungsi-fungsi yang telah didefinisikan

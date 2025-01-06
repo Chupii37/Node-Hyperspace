@@ -10,15 +10,12 @@ NC='\033[0m'  # Tanpa warna (reset)
 echo -e "${CYAN}SHOWING ANIANI!!!${NC}"
 
 # Fungsi untuk menunggu input atau konfirmasi pengguna
-ask_user_confirmation() {
-  while true; do
-    read -p "$1 (yes/no): " answer
-    case "$answer" in
-      [Yy]* ) return 0 ;;  # Jika jawabannya 'yes' atau variasi lainnya, lanjutkan.
-      [Nn]* ) echo -e "${RED}❌ Proses dibatalkan.${NC}" && exit 1 ;;  # Jika jawabannya 'no' atau variasi lainnya, batalkan.
-      * ) echo -e "${RED}Input tidak valid. Harap ketik 'yes' atau 'no'.${NC}" ;;  # Jika input tidak valid, beri tahu dan minta input ulang.
-    esac
-  done
+wait_for_user() {
+  read -p "Apakah Anda ingin melanjutkan? (yes/no): " answer
+  if [[ "$answer" != "yes" ]]; then
+    echo -e "${RED}❌ Proses dibatalkan.${NC}"
+    exit 1
+  fi
 }
 
 # Mengunduh dan memeriksa Logo.sh
@@ -97,40 +94,45 @@ pull_and_run_docker() {
       /app/aios-cli start
       /app/aios-cli models available
       /app/aios-cli models add hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf
-      # Menunggu konfirmasi pengguna untuk menjalankan infer
-      echo -e '${CYAN}Apakah Anda ingin menjalankan infer dengan model yang telah diinstal?${NC}'
-      ask_user_confirmation 'Apakah Anda ingin menjalankan infer dengan model yang telah diinstal?'
-      echo -e '${BLUE}Menjalankan infer menggunakan model yang telah diinstal...${NC}'
-      docker exec -it aios-container /app/aios-cli infer --model hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf --prompt 'Can you explain how to write an HTTP server in Rust?'
-      if [[ \$? -ne 0 ]]; then
-        echo -e '${RED}❌ Gagal menjalankan infer.${NC}'
-        exit 1
-      fi
-      echo -e '${GREEN}Infer berhasil dijalankan.${NC}'
-      /app/aios-cli hive import-keys ./my.pem
-      /app/aios-cli hive login
-      /app/aios-cli hive select-tier 4
-      /app/aios-cli hive connect
-      # Menunggu konfirmasi pengguna untuk menjalankan infer melalui hive
-      echo -e '${CYAN}Apakah Anda ingin menjalankan infer dengan Hive menggunakan model yang telah diinstal?${NC}'
-      ask_user_confirmation 'Apakah Anda ingin menjalankan infer dengan Hive menggunakan model yang telah diinstal?'
-      echo -e '${BLUE}Menjalankan infer Hive menggunakan model yang telah diinstal...${NC}'
-      docker exec -it aios-container /app/aios-cli hive infer --model hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf --prompt 'Can you explain how to write an HTTP server in Rust?'
-      if [[ \$? -ne 0 ]]; then
-        echo -e '${RED}❌ Gagal menjalankan infer Hive.${NC}'
-        exit 1
-      fi
-      echo -e '${GREEN}Infer Hive berhasil dijalankan.${NC}'
-
-      # Tunggu 20 detik sebelum keluar dari dalam kontainer
-      echo -e '${BLUE}Menunggu 20 detik sebelum keluar dari kontainer...${NC}'
-      sleep 20
-
-      # Keluar dari dalam kontainer dan pastikan Docker tetap berjalan
-      echo -e '${BLUE}Keluar dari kontainer dan memastikan Docker tetap berjalan...${NC}'
-      docker exec -it aios-container bash -c 'exit'
-      docker start aios-container
     "
+
+    # Menunggu konfirmasi pengguna untuk menjalankan infer
+    echo -e "${CYAN}Apakah Anda ingin menjalankan infer dengan model yang telah diinstal? (yes/no)${NC}"
+    read -p "Masukkan jawaban: " answer
+    if [[ "$answer" != "yes" ]]; then
+        echo -e "${RED}❌ Proses infer dibatalkan.${NC}"
+        exit 1
+    fi
+
+    echo -e "${BLUE}Menjalankan infer menggunakan model yang telah diinstal...${NC}"
+    docker exec -it aios-container /app/aios-cli infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Can you explain how to write an HTTP server in Rust?"
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}❌ Gagal menjalankan infer.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}Infer berhasil dijalankan.${NC}"
+
+    # Menggunakan private key untuk login ke Hive
+    /app/aios-cli hive import-keys ./my.pem
+    /app/aios-cli hive login
+    /app/aios-cli hive select-tier 4
+    /app/aios-cli hive connect
+
+    # Menunggu konfirmasi pengguna untuk menjalankan infer melalui Hive
+    echo -e "${CYAN}Apakah Anda ingin menjalankan infer dengan Hive menggunakan model yang telah diinstal? (yes/no)${NC}"
+    read -p "Masukkan jawaban: " answer
+    if [[ "$answer" != "yes" ]]; then
+        echo -e "${RED}❌ Proses infer Hive dibatalkan.${NC}"
+        exit 1
+    fi
+
+    echo -e "${BLUE}Menjalankan infer Hive menggunakan model yang telah diinstal...${NC}"
+    docker exec -it aios-container /app/aios-cli hive infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Can you explain how to write an HTTP server in Rust?"
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}❌ Gagal menjalankan infer Hive.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}Infer Hive berhasil dijalankan.${NC}"
   fi
 }
 

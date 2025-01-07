@@ -201,7 +201,6 @@ start_container
 wait_for_container_to_start
 check_daemon_status
 install_local_model
-check_installed_model  # Added after installing model
 run_infer
 hive_login
 run_hive_infer

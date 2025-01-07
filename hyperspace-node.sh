@@ -102,13 +102,7 @@ check_daemon_status() {
 # Menginstal model lokal
 install_local_model() {
     echo -e "${BLUE}Menginstal model lokal...${NC}"
-    docker exec -it aios-container /app/aios-cli models add hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf
-}
-
-# Memeriksa model yang telah ditambahkan
-check_installed_model() {
-    echo -e "${BLUE}Memeriksa model yang telah ditambahkan...${NC}"
-    docker exec -it aios-container /app/aios-cli models check
+    docker exec -it aios-container /app/aios-cli models add hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf
 }
 
 # Menjalankan infer dengan model yang telah diinstal
@@ -121,7 +115,7 @@ run_infer() {
     fi
 
     echo -e "${BLUE}Menjalankan infer menggunakan model yang telah diinstal...${NC}"
-    docker exec -it aios-container /app/aios-cli infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Can you explain how to write an HTTP server in Rust?"
+    docker exec -it aios-container /app/aios-cli infer --model hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf --prompt "Can you explain how to write an HTTP server in Rust?"
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}❌ Gagal menjalankan infer.${NC}"
         exit 1
@@ -147,7 +141,7 @@ run_hive_infer() {
     fi
 
     echo -e "${BLUE}Menjalankan infer Hive menggunakan model yang telah diinstal...${NC}"
-    docker exec -it aios-container /app/aios-cli hive infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Can you explain how to write an HTTP server in Rust?"
+    docker exec -it aios-container /app/aios-cli hive infer --model hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf --prompt "Can you explain how to write an HTTP server in Rust?"
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}❌ Gagal menjalankan infer Hive.${NC}"
         exit 1

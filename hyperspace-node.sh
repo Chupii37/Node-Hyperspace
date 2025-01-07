@@ -111,13 +111,9 @@ run_infer() {
         exit 1
     fi
 
+    # Wait for 5 seconds after stats output before continuing
     echo -e "${CYAN}Menunggu infer selesai...${NC}"
-    while true; do
-        infer_status=$(docker exec -it aios-container /app/aios-cli status | grep -i "completed")
-        if [[ -n "$infer_status" ]]; then
-            break
-        fi
-    done
+    sleep 5  # Added 5 seconds delay after stats
 
     echo -e "${GREEN}Infer berhasil dijalankan.${NC}"
 }
@@ -144,13 +140,9 @@ run_hive_infer() {
         exit 1
     fi
 
+    # Wait for 5 seconds after Hive infer completion before continuing
     echo -e "${CYAN}Menunggu infer Hive selesai...${NC}"
-    while true; do
-        hive_status=$(docker exec -it aios-container /app/aios-cli hive status | grep -i "completed")
-        if [[ -n "$hive_status" ]]; then
-            break
-        fi
-    done
+    sleep 5  # Added 5 seconds delay after Hive inference
 
     echo -e "${GREEN}Infer Hive berhasil dijalankan.${NC}"
 }

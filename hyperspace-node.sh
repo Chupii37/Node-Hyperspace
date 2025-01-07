@@ -120,6 +120,20 @@ run_infer() {
         echo -e "${RED}❌ Gagal menjalankan infer.${NC}"
         exit 1
     fi
+
+    # Polling untuk memastikan infer selesai
+    echo -e "${CYAN}Menunggu infer selesai...${NC}"
+    while true; do
+        # Periksa apakah ada proses infer yang aktif (atau periksa log/error yang menunjukkan selesai)
+        infer_status=$(docker exec -it aios-container /app/aios-cli status | grep -i "completed")  # Sesuaikan dengan output yang menunjukkan infer selesai
+        if [[ -n "$infer_status" ]]; then
+            break  # Keluar dari loop jika infer selesai
+        fi
+        # Jika belum selesai, tunggu 10 detik sebelum mencoba lagi
+        echo -e "${CYAN}Infer masih berjalan. Menunggu 10 detik...${NC}"
+        sleep 10
+    done
+
     echo -e "${GREEN}Infer berhasil dijalankan.${NC}"
 }
 
@@ -146,6 +160,20 @@ run_hive_infer() {
         echo -e "${RED}❌ Gagal menjalankan infer Hive.${NC}"
         exit 1
     fi
+
+    # Polling untuk memastikan infer Hive selesai
+    echo -e "${CYAN}Menunggu infer Hive selesai...${NC}"
+    while true; do
+        # Periksa apakah ada proses infer Hive yang aktif (atau periksa log/error yang menunjukkan selesai)
+        hive_status=$(docker exec -it aios-container /app/aios-cli hive status | grep -i "completed")  # Sesuaikan dengan output yang menunjukkan infer selesai
+        if [[ -n "$hive_status" ]]; then
+            break  # Keluar dari loop jika infer Hive selesai
+        fi
+        # Jika belum selesai, tunggu 10 detik sebelum mencoba lagi
+        echo -e "${CYAN}Infer Hive masih berjalan. Menunggu 10 detik...${NC}"
+        sleep 10
+    done
+
     echo -e "${GREEN}Infer Hive berhasil dijalankan.${NC}"
 }
 

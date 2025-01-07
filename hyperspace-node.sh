@@ -34,14 +34,25 @@ if [[ $? -ne 0 ]]; then
 fi
 echo -e "${GREEN}Sistem berhasil diperbarui.${NC}"
 
-# Fungsi untuk mendapatkan private key
+# Meminta pengguna untuk memasukkan path ke private key
 get_private_key() {
-  echo -e "${CYAN}Silakan masukkan private key...${NC}"
-  read -s -p "Masukkan private key: " private_key
-  echo -e "\n"
-  echo -e "$private_key" > ./my.pem
-  chmod 600 ./my.pem
-  echo -e "${GREEN}Private key telah disimpan dengan nama my.pem dan hak akses sudah diatur.${NC}"
+    read -p "Masukkan path private key (misalnya: /path/to/your/private/key.pem): " private_key_path
+    if [[ -f "$private_key_path" ]]; then
+        echo -e "✅ Private key ditemukan di $private_key_path."
+    else
+        echo -e "❌ Private key tidak ditemukan di $private_key_path."
+        echo -e "Membuat private key baru..."
+        generate_private_key
+    fi
+}
+
+# Fungsi untuk menghasilkan private key baru
+generate_private_key() {
+    echo -e "🔑 Menghasilkan private key baru..."
+    # Generate a new private key (this is an example, adjust it based on how you generate your private keys)
+    ssh-keygen -t rsa -b 2048 -f ./my.pem -N ""
+    chmod 600 ./my.pem
+    echo -e "✅ Private key baru telah dihasilkan dan disimpan sebagai ./my.pem."
 }
 
 # Mengecek dan menginstal Docker jika diperlukan
@@ -68,7 +79,7 @@ check_and_install_docker() {
 # Fungsi untuk menjalankan kontainer
 start_container() {
     echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
-    docker run -d --name aios-container --restart unless-stopped -v /root:/root kartikhyper/aios /app/aios-cli start
+    docker run -d --name aios-container -v /root:/root kartikhyper/aios /app/aios-cli start
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}❌ Gagal menjalankan kontainer.${NC}"
         exit 1
@@ -84,36 +95,19 @@ wait_for_container_to_start() {
 
 # Memulai daemon di dalam kontainer
 start_daemon() {
-    # Cek apakah daemon sudah berjalan
-    echo -e "${CYAN}Memeriksa apakah daemon sudah berjalan...${NC}"
-    docker exec -it aios-container /app/aios-cli status
-    if [[ $? -eq 0 ]]; then
-        # Daemon sudah berjalan
-        echo -e "${GREEN}Daemon sudah berjalan.${NC}"
-    else
-        # Daemon tidak berjalan, memulai daemon
-        echo -e "${BLUE}Memulai daemon...${NC}"
+    echo -e "${BLUE}Masuk ke dalam kontainer dan memulai daemon...${NC}"
+    docker exec -it aios-container /app/aios-cli start
+    
+    echo -e "${CYAN}Menunggu daemon berjalan selama 10 detik...${NC}"
+    timeout 10 docker exec -it aios-container /app/aios-cli status
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}❌ Daemon tidak berjalan, menghentikan dan memulai ulang...${NC}"
+        docker exec -it aios-container /app/aios-cli kill
+        sleep 2
+        echo -e "${BLUE}Memulai ulang daemon...${NC}"
         docker exec -it aios-container /app/aios-cli start
-        echo -e "${CYAN}Menunggu daemon berjalan selama 10 detik...${NC}"
-        timeout 10 docker exec -it aios-container /app/aios-cli status
-        if [[ $? -ne 0 ]]; then
-            # Daemon gagal berjalan, coba menghentikan dan memulai ulang
-            echo -e "${RED}❌ Daemon tidak berjalan, menghentikan dan memulai ulang...${NC}"
-            docker exec -it aios-container /app/aios-cli kill
-            sleep 2
-            echo -e "${BLUE}Memulai ulang daemon...${NC}"
-            docker exec -it aios-container /app/aios-cli start
-            # Cek kembali status daemon setelah mencoba memulai ulang
-            timeout 10 docker exec -it aios-container /app/aios-cli status
-            if [[ $? -eq 0 ]]; then
-                echo -e "${GREEN}Daemon berhasil dijalankan setelah restart.${NC}"
-            else
-                echo -e "${RED}❌ Gagal memulai daemon setelah restart.${NC}"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}Daemon berhasil dijalankan.${NC}"
-        fi
+    else
+        echo -e "${GREEN}Daemon berhasil dijalankan.${NC}"
     fi
 }
 
@@ -149,7 +143,7 @@ run_infer() {
 
 # Menggunakan private key untuk login ke Hive
 hive_login() {
-    docker exec -it aios-container /app/aios-cli hive import-keys ./my.pem
+    docker exec -it aios-container /app/aios-cli hive import-keys "$private_key_path"
     docker exec -it aios-container /app/aios-cli hive login
     docker exec -it aios-container /app/aios-cli hive select-tier 4
     docker exec -it aios-container /app/aios-cli hive connect

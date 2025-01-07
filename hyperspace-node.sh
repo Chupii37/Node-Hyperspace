@@ -6,8 +6,6 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'  # Reset
 
-echo -e "${CYAN}SHOWING ANIANI!!!${NC}"
-
 # Menunggu konfirmasi dari pengguna untuk melanjutkan
 wait_for_user() {
   read -p "Apakah Anda ingin melanjutkan? (yes/no): " answer
@@ -17,6 +15,19 @@ wait_for_user() {
   fi
 }
 
+# Memastikan sistem sudah terupdate
+echo -e "${BLUE}Memastikan sistem sudah terupdate...${NC}"
+apt update -y && apt upgrade -y
+if [[ $? -ne 0 ]]; then
+    echo -e "${RED}❌ Gagal memperbarui sistem.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}Sistem berhasil diperbarui.${NC}"
+
+# Menunggu konfirmasi dari pengguna untuk melanjutkan
+wait_for_user
+
+# Menampilkan Logo.sh
 echo -e "${BLUE}📥 Mengunduh dan memeriksa Logo.sh...${NC}"
 wget https://raw.githubusercontent.com/Chupii37/Chupii-Node/refs/heads/main/Logo.sh -O Logo.sh
 if [[ $? -ne 0 ]]; then
@@ -26,33 +37,13 @@ fi
 cat Logo.sh
 bash Logo.sh
 
-echo -e "${BLUE}Memastikan sistem sudah terupdate...${NC}"
-apt update -y && apt upgrade -y
-if [[ $? -ne 0 ]]; then
-    echo -e "${RED}❌ Gagal memperbarui sistem.${NC}"
-    exit 1
-fi
-echo -e "${GREEN}Sistem berhasil diperbarui.${NC}"
-
-# Meminta pengguna untuk memasukkan path ke private key
 get_private_key() {
-    read -p "Masukkan path private key (misalnya: /path/to/your/private/key.pem): " private_key_path
-    if [[ -f "$private_key_path" ]]; then
-        echo -e "✅ Private key ditemukan di $private_key_path."
-    else
-        echo -e "❌ Private key tidak ditemukan di $private_key_path."
-        echo -e "Membuat private key baru..."
-        generate_private_key
-    fi
-}
-
-# Fungsi untuk menghasilkan private key baru
-generate_private_key() {
-    echo -e "🔑 Menghasilkan private key baru..."
-    # Generate a new private key (this is an example, adjust it based on how you generate your private keys)
-    ssh-keygen -t rsa -b 2048 -f ./my.pem -N ""
-    chmod 600 ./my.pem
-    echo -e "✅ Private key baru telah dihasilkan dan disimpan sebagai ./my.pem."
+  echo -e "${CYAN}Silakan masukkan private key...${NC}"
+  read -s -p "Masukkan private key: " private_key
+  echo -e "\n"
+  echo -e "$private_key" > /root/my.pem
+  chmod 600 /root/my.pem
+  echo -e "${GREEN}Private key telah disimpan dengan nama my.pem dan hak akses sudah diatur.${NC}"
 }
 
 # Mengecek dan menginstal Docker jika diperlukan
@@ -76,7 +67,7 @@ check_and_install_docker() {
   fi
 }
 
-# Fungsi untuk menjalankan kontainer
+# Memulai kontainer Docker
 start_container() {
     echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
     docker run -d --name aios-container -v /root:/root kartikhyper/aios /app/aios-cli start
@@ -87,40 +78,37 @@ start_container() {
     echo -e "${GREEN}Kontainer berhasil dijalankan.${NC}"
 }
 
-# Fungsi untuk menunggu kontainer dan daemon berjalan
+# Menunggu kontainer dan daemon berjalan
 wait_for_container_to_start() {
     echo -e "${CYAN}Menunggu kontainer Docker untuk memulai (60 detik)...${NC}"
     sleep 60  # Tunggu 1 menit untuk kontainer memulai daemon
 }
 
-# Memulai daemon di dalam kontainer
-start_daemon() {
-    echo -e "${BLUE}Masuk ke dalam kontainer dan memulai daemon...${NC}"
-    docker exec -it aios-container /app/aios-cli start
-    
-    echo -e "${CYAN}Menunggu daemon berjalan selama 10 detik...${NC}"
-    timeout 10 docker exec -it aios-container /app/aios-cli status
+# Memastikan daemon berjalan dengan benar
+check_daemon_status() {
+    echo -e "${BLUE}Memeriksa status daemon di dalam kontainer...${NC}"
+    docker exec -it aios-container /app/aios-cli status
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Daemon tidak berjalan, menghentikan dan memulai ulang...${NC}"
+        echo -e "${RED}❌ Daemon tidak berjalan, mencoba untuk memulai ulang...${NC}"
         docker exec -it aios-container /app/aios-cli kill
         sleep 2
-        echo -e "${BLUE}Memulai ulang daemon...${NC}"
         docker exec -it aios-container /app/aios-cli start
+        echo -e "${GREEN}Daemon berhasil dimulai ulang.${NC}"
     else
-        echo -e "${GREEN}Daemon berhasil dijalankan.${NC}"
+        echo -e "${GREEN}Daemon sudah berjalan.${NC}"
     fi
-}
-
-# Melihat model yang tersedia di dalam kontainer
-view_available_models() {
-    echo -e "${BLUE}Melihat model-model yang tersedia...${NC}"
-    docker exec -it aios-container /app/aios-cli models available
 }
 
 # Menginstal model lokal
 install_local_model() {
     echo -e "${BLUE}Menginstal model lokal...${NC}"
     docker exec -it aios-container /app/aios-cli models add hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf
+}
+
+# Memeriksa model yang telah ditambahkan
+check_installed_model() {
+    echo -e "${BLUE}Memeriksa model yang telah ditambahkan...${NC}"
+    docker exec -it aios-container /app/aios-cli models check
 }
 
 # Menjalankan infer dengan model yang telah diinstal
@@ -143,7 +131,7 @@ run_infer() {
 
 # Menggunakan private key untuk login ke Hive
 hive_login() {
-    docker exec -it aios-container /app/aios-cli hive import-keys "$private_key_path"
+    docker exec -it aios-container /app/aios-cli hive import-keys /root/my.pem
     docker exec -it aios-container /app/aios-cli hive login
     docker exec -it aios-container /app/aios-cli hive select-tier 4
     docker exec -it aios-container /app/aios-cli hive connect
@@ -189,9 +177,9 @@ check_and_install_docker
 get_private_key
 start_container
 wait_for_container_to_start
-start_daemon
-view_available_models
+check_daemon_status
 install_local_model
+check_installed_model  # Added after installing model
 run_infer
 hive_login
 run_hive_infer

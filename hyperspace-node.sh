@@ -1,15 +1,13 @@
 #!/bin/bash
 
-# Definisikan warna untuk output yang lebih mudah dibaca
 CYAN='\033[0;36m'
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
-NC='\033[0m'  # Tanpa warna (reset)
+NC='\033[0m'  # Reset
 
 echo -e "${CYAN}SHOWING ANIANI!!!${NC}"
 
-# Fungsi untuk menunggu input atau konfirmasi pengguna
 wait_for_user() {
   read -p "Apakah Anda ingin melanjutkan? (yes/no): " answer
   if [[ "$answer" != "yes" ]]; then
@@ -18,17 +16,15 @@ wait_for_user() {
   fi
 }
 
-# Mengunduh dan memeriksa Logo.sh
 echo -e "${BLUE}📥 Mengunduh dan memeriksa Logo.sh...${NC}"
 wget https://raw.githubusercontent.com/Chupii37/Chupii-Node/refs/heads/main/Logo.sh -O Logo.sh
 if [[ $? -ne 0 ]]; then
     echo -e "${RED}❌ Gagal mengunduh Logo.sh.${NC}"
     exit 1
 fi
-cat Logo.sh  # Verifikasi konten skrip
-bash Logo.sh  # Menjalankan Logo.sh
+cat Logo.sh
+bash Logo.sh
 
-# Update sistem
 echo -e "${BLUE}Memastikan sistem sudah terupdate...${NC}"
 apt update -y && apt upgrade -y
 if [[ $? -ne 0 ]]; then
@@ -37,17 +33,15 @@ if [[ $? -ne 0 ]]; then
 fi
 echo -e "${GREEN}Sistem berhasil diperbarui.${NC}"
 
-# Meminta input private key dan menyimpannya
 get_private_key() {
   echo -e "${CYAN}Silakan masukkan private key...${NC}"
   read -s -p "Masukkan private key: " private_key
-  echo -e "\n"  # Newline after input for clarity
+  echo -e "\n"
   echo -e "$private_key" > ./my.pem
   chmod 600 ./my.pem
   echo -e "${GREEN}Private key telah disimpan dengan nama my.pem dan hak akses sudah diatur.${NC}"
 }
 
-# Memeriksa apakah Docker terinstal, jika belum instal
 check_and_install_docker() {
   if ! command -v docker &> /dev/null; then
     echo -e "${RED}Docker tidak ditemukan. Menginstal Docker...${NC}"
@@ -68,7 +62,6 @@ check_and_install_docker() {
   fi
 }
 
-# Menarik dan menjalankan kontainer Docker
 pull_and_run_docker() {
   echo -e "${BLUE}Menarik image Docker kartikhyper/aios...${NC}"
   docker pull kartikhyper/aios
@@ -81,35 +74,38 @@ pull_and_run_docker() {
   container_running=$(docker ps -q -f name=aios-container)
   if [ -z "$container_running" ]; then
     echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
-    # Mengubah perintah docker run untuk memastikan kontainer tetap berjalan
-    docker run -d --name aios-container -v /root:/root kartikhyper/aios /bin/bash -c "while true; do sleep 3600; done"
+    docker run -d --name aios-container -v /root:/root kartikhyper/aios /bin/bash
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}❌ Gagal menjalankan kontainer Docker.${NC}"
         exit 1
     fi
     echo -e "${GREEN}Kontainer Docker berhasil dijalankan.${NC}"
 
-    # Masuk ke dalam kontainer dan mulai daemon dengan timeout 20 detik
     echo -e "${BLUE}Masuk ke dalam kontainer dan memulai daemon...${NC}"
     docker exec -it aios-container bash -c "
       echo 'Memulai daemon...'
       /app/aios-cli start
     "
 
-    # Menggunakan timeout untuk menunggu hingga 20 detik
-    echo -e "${CYAN}Menunggu daemon berjalan selama 20 detik...${NC}"
-    timeout 20 docker exec -it aios-container /app/aios-cli status
+    echo -e "${CYAN}Menunggu daemon berjalan selama 10 detik...${NC}"
+    timeout 10 docker exec -it aios-container /app/aios-cli status
 
     if [[ $? -ne 0 ]]; then
         echo -e "${RED}❌ Daemon tidak berjalan, menghentikan dan memulai ulang...${NC}"
-        # Membunuh proses daemon dan memulai ulang
         docker exec -it aios-container /app/aios-cli kill
-        sleep 2  # Tunggu sebentar sebelum memulai ulang
+        sleep 2
         echo -e "${BLUE}Memulai ulang daemon...${NC}"
         docker exec -it aios-container /app/aios-cli start
     fi
 
-    # Menunggu konfirmasi pengguna untuk menjalankan infer
+    # See what models are available
+    echo -e "${BLUE}Melihat model-model yang tersedia...${NC}"
+    docker exec -it aios-container /app/aios-cli models available
+
+    # Install one of them locally
+    echo -e "${BLUE}Menginstal model lokal...${NC}"
+    docker exec -it aios-container /app/aios-cli models add hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf
+
     echo -e "${CYAN}Apakah Anda ingin menjalankan infer dengan model yang telah diinstal? (yes/no)${NC}"
     read -p "Masukkan jawaban: " answer
     if [[ "$answer" != "yes" ]]; then
@@ -125,13 +121,11 @@ pull_and_run_docker() {
     fi
     echo -e "${GREEN}Infer berhasil dijalankan.${NC}"
 
-    # Menggunakan private key untuk login ke Hive
     /app/aios-cli hive import-keys ./my.pem
     /app/aios-cli hive login
     /app/aios-cli hive select-tier 4
     /app/aios-cli hive connect
 
-    # Menunggu konfirmasi pengguna untuk menjalankan infer melalui Hive
     echo -e "${CYAN}Apakah Anda ingin menjalankan infer dengan Hive menggunakan model yang telah diinstal? (yes/no)${NC}"
     read -p "Masukkan jawaban: " answer
     if [[ "$answer" != "yes" ]]; then
@@ -147,7 +141,6 @@ pull_and_run_docker() {
     fi
     echo -e "${GREEN}Infer Hive berhasil dijalankan.${NC}"
 
-    # Menambahkan langkah untuk memeriksa multiplier dan points
     echo -e "${BLUE}Memeriksa multiplier dan poin Hive...${NC}"
     docker exec -it aios-container /app/aios-cli hive points
     if [[ $? -ne 0 ]]; then
@@ -158,7 +151,6 @@ pull_and_run_docker() {
   fi
 }
 
-# Menjalankan fungsi-fungsi yang telah didefinisikan
 check_and_install_docker
 get_private_key
 pull_and_run_docker

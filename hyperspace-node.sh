@@ -46,7 +46,7 @@ check_and_install_docker() {
   if ! command -v docker &> /dev/null; then
     echo -e "${RED}Docker tidak ditemukan. Menginstal Docker...${NC}"
     apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - 
     add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
     apt update -y
     apt install -y docker-ce
@@ -71,85 +71,111 @@ pull_and_run_docker() {
   fi
   echo -e "${GREEN}Image Docker berhasil diunduh.${NC}"
 
+  echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
+  docker run -d --name aios-container -v /root:/root kartikhyper/aios /bin/bash
+  if [[ $? -ne 0 ]]; then
+    echo -e "${RED}❌ Gagal menjalankan kontainer Docker.${NC}"
+    exit 1
+  fi
+  echo -e "${GREEN}Kontainer Docker berhasil dijalankan.${NC}"
+
+  # Menunggu beberapa detik untuk memastikan kontainer siap
+  sleep 5
+
+  # Memeriksa apakah kontainer sedang berjalan
   container_running=$(docker ps -q -f name=aios-container)
   if [ -z "$container_running" ]; then
-    echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
-    docker run -d --name aios-container -v /root:/root kartikhyper/aios /bin/bash
-    if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Gagal menjalankan kontainer Docker.${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}Kontainer Docker berhasil dijalankan.${NC}"
-
-    echo -e "${BLUE}Masuk ke dalam kontainer dan memulai daemon...${NC}"
-    docker exec -it aios-container bash -c "
-      echo 'Memulai daemon...'
-      /app/aios-cli start
-    "
-
-    echo -e "${CYAN}Menunggu daemon berjalan selama 10 detik...${NC}"
-    timeout 10 docker exec -it aios-container /app/aios-cli status
-
-    if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Daemon tidak berjalan, menghentikan dan memulai ulang...${NC}"
-        docker exec -it aios-container /app/aios-cli kill
-        sleep 2
-        echo -e "${BLUE}Memulai ulang daemon...${NC}"
-        docker exec -it aios-container /app/aios-cli start
-    fi
-
-    # See what models are available
-    echo -e "${BLUE}Melihat model-model yang tersedia...${NC}"
-    docker exec -it aios-container /app/aios-cli models available
-
-    # Install one of them locally
-    echo -e "${BLUE}Menginstal model lokal...${NC}"
-    docker exec -it aios-container /app/aios-cli models add hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf
-
-    echo -e "${CYAN}Apakah Anda ingin menjalankan infer dengan model yang telah diinstal? (yes/no)${NC}"
-    read -p "Masukkan jawaban: " answer
-    if [[ "$answer" != "yes" ]]; then
-        echo -e "${RED}❌ Proses infer dibatalkan.${NC}"
-        exit 1
-    fi
-
-    echo -e "${BLUE}Menjalankan infer menggunakan model yang telah diinstal...${NC}"
-    docker exec -it aios-container /app/aios-cli infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Can you explain how to write an HTTP server in Rust?"
-    if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Gagal menjalankan infer.${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}Infer berhasil dijalankan.${NC}"
-
-    # Menggunakan private key untuk login ke Hive
-    docker exec -it aios-container /app/aios-cli hive import-keys ./my.pem
-    docker exec -it aios-container /app/aios-cli hive login
-    docker exec -it aios-container /app/aios-cli hive select-tier 4
-    docker exec -it aios-container /app/aios-cli hive connect
-
-    echo -e "${CYAN}Apakah Anda ingin menjalankan infer dengan Hive menggunakan model yang telah diinstal? (yes/no)${NC}"
-    read -p "Masukkan jawaban: " answer
-    if [[ "$answer" != "yes" ]]; then
-        echo -e "${RED}❌ Proses infer Hive dibatalkan.${NC}"
-        exit 1
-    fi
-
-    echo -e "${BLUE}Menjalankan infer Hive menggunakan model yang telah diinstal...${NC}"
-    docker exec -it aios-container /app/aios-cli hive infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Can you explain how to write an HTTP server in Rust?"
-    if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Gagal menjalankan infer Hive.${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}Infer Hive berhasil dijalankan.${NC}"
-
-    echo -e "${BLUE}Memeriksa multiplier dan poin Hive...${NC}"
-    docker exec -it aios-container /app/aios-cli hive points
-    if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Gagal memeriksa multiplier dan poin Hive.${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}Poin dan multiplier Hive berhasil diperiksa.${NC}"
+    echo -e "${RED}❌ Kontainer tidak berjalan setelah 5 detik.${NC}"
+    exit 1
   fi
+
+  echo -e "${BLUE}Masuk ke dalam kontainer dan memulai daemon...${NC}"
+  docker exec -it aios-container bash -c "
+    echo 'Memulai daemon...'
+    /app/aios-cli start
+  "
+
+  # Tunggu beberapa detik untuk memastikan daemon berjalan
+  echo -e "${CYAN}Menunggu daemon untuk mulai (5 detik)...${NC}"
+  sleep 5
+
+  # Memeriksa jika server gRPC aktif di port 50051
+  container_running=$(docker exec aios-container netstat -tuln | grep 50051)
+  if [ -z "$container_running" ]; then
+    echo -e "${RED}❌ gRPC server belum berjalan pada port 50051.${NC}"
+    exit 1
+  fi
+
+  echo -e "${GREEN}Daemon berjalan dengan sukses, gRPC server aktif pada port 50051.${NC}"
+
+  # Lanjutkan untuk memeriksa model-model yang tersedia
+  echo -e "${BLUE}Melihat model-model yang tersedia...${NC}"
+  docker exec -it aios-container /app/aios-cli models available
+
+  # Meminta konfirmasi untuk melanjutkan instalasi model
+  echo -e "${CYAN}Apakah Anda ingin menginstal model lokal? (yes/no)${NC}"
+  read -p "Masukkan jawaban: " answer
+  if [[ "$answer" != "yes" ]]; then
+      echo -e "${RED}❌ Proses instalasi model dibatalkan.${NC}"
+      exit 1
+  fi
+
+  # Menginstal model lokal
+  echo -e "${BLUE}Menginstal model lokal...${NC}"
+  docker exec -it aios-container /app/aios-cli models add hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf
+  if [[ $? -ne 0 ]]; then
+    echo -e "${RED}❌ Gagal menginstal model lokal.${NC}"
+    exit 1
+  fi
+  echo -e "${GREEN}Model berhasil diinstal.${NC}"
+
+  # Menjalankan infer dengan model yang telah diinstal
+  echo -e "${CYAN}Apakah Anda ingin menjalankan infer menggunakan model yang telah diinstal? (yes/no)${NC}"
+  read -p "Masukkan jawaban: " answer
+  if [[ "$answer" != "yes" ]]; then
+      echo -e "${RED}❌ Proses infer dibatalkan.${NC}"
+      exit 1
+  fi
+
+  echo -e "${BLUE}Menjalankan infer menggunakan model yang telah diinstal...${NC}"
+  docker exec -it aios-container /app/aios-cli infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Can you explain how to write an HTTP server in Rust?"
+  if [[ $? -ne 0 ]]; then
+    echo -e "${RED}❌ Gagal menjalankan infer.${NC}"
+    exit 1
+  fi
+  echo -e "${GREEN}Infer berhasil dijalankan.${NC}"
+
+  # Menggunakan private key untuk login ke Hive
+  echo -e "${BLUE}Menggunakan private key untuk login ke Hive...${NC}"
+  docker exec -it aios-container /app/aios-cli hive import-keys ./my.pem
+  docker exec -it aios-container /app/aios-cli hive login
+  docker exec -it aios-container /app/aios-cli hive select-tier 4
+  docker exec -it aios-container /app/aios-cli hive connect
+
+  # Menjalankan infer dengan Hive menggunakan model yang telah diinstal
+  echo -e "${CYAN}Apakah Anda ingin menjalankan infer Hive menggunakan model yang telah diinstal? (yes/no)${NC}"
+  read -p "Masukkan jawaban: " answer
+  if [[ "$answer" != "yes" ]]; then
+      echo -e "${RED}❌ Proses infer Hive dibatalkan.${NC}"
+      exit 1
+  fi
+
+  echo -e "${BLUE}Menjalankan infer Hive menggunakan model yang telah diinstal...${NC}"
+  docker exec -it aios-container /app/aios-cli hive infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Can you explain how to write an HTTP server in Rust?"
+  if [[ $? -ne 0 ]]; then
+    echo -e "${RED}❌ Gagal menjalankan infer Hive.${NC}"
+    exit 1
+  fi
+  echo -e "${GREEN}Infer Hive berhasil dijalankan.${NC}"
+
+  # Memeriksa multiplier dan poin Hive
+  echo -e "${BLUE}Memeriksa multiplier dan poin Hive...${NC}"
+  docker exec -it aios-container /app/aios-cli hive points
+  if [[ $? -ne 0 ]]; then
+    echo -e "${RED}❌ Gagal memeriksa multiplier dan poin Hive.${NC}"
+    exit 1
+  fi
+  echo -e "${GREEN}Poin dan multiplier Hive berhasil diperiksa.${NC}"
 }
 
 check_and_install_docker

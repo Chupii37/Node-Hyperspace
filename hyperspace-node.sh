@@ -178,6 +178,12 @@ check_hive_points() {
     echo -e "${GREEN}Poin dan multiplier Hive berhasil diperiksa.${NC}"
 }
 
+# Mendapatkan kunci yang sedang login saat ini di Hive
+get_current_signed_in_keys() {
+    echo -e "${BLUE}Mendapatkan kunci yang sedang login saat ini...${NC}"
+    docker exec -it aios-container /app/aios-cli hive whoami
+}
+
 # Langkah-langkah utama
 check_and_install_docker
 get_private_key
@@ -190,5 +196,6 @@ run_infer
 hive_login
 run_hive_infer
 check_hive_points
+get_current_signed_in_keys
 
 echo -e "${GREEN}Semua langkah berhasil dilakukan!${NC}"

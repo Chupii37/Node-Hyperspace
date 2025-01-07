@@ -80,12 +80,31 @@ start_container() {
 wait_for_container_to_start() {
     echo -e "${CYAN}Menunggu kontainer Docker untuk memulai (60 detik)...${NC}"
     sleep 60  # Tunggu 1 menit untuk kontainer memulai daemon
+    
+    # Verifikasi apakah kontainer berjalan dengan baik
+    docker ps | grep aios-container &> /dev/null
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}❌ Kontainer Docker tidak berjalan. Pastikan kontainer dijalankan dengan benar.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}Kontainer Docker berhasil berjalan.${NC}"
 }
 
 # Memulai daemon di dalam kontainer
 start_daemon() {
     echo -e "${BLUE}Masuk ke dalam kontainer dan memulai daemon...${NC}"
-    docker exec -it aios-container bash -c "/app/aios-cli start"
+    
+    # Cek apakah daemon sudah berjalan
+    docker exec -it aios-container /app/aios-cli status
+    if [[ $? -eq 0 ]]; then
+        echo -e "${RED}Daemon sudah berjalan, menghentikan daemon yang sedang berjalan...${NC}"
+        docker exec -it aios-container /app/aios-cli kill
+        sleep 2  # Tunggu sebentar agar daemon berhenti
+    fi
+    
+    # Memulai ulang daemon
+    echo -e "${BLUE}Memulai daemon...${NC}"
+    docker exec -it aios-container /app/aios-cli start
     
     echo -e "${CYAN}Menunggu daemon berjalan selama 10 detik...${NC}"
     timeout 10 docker exec -it aios-container /app/aios-cli status
@@ -95,6 +114,8 @@ start_daemon() {
         sleep 2
         echo -e "${BLUE}Memulai ulang daemon...${NC}"
         docker exec -it aios-container /app/aios-cli start
+    else
+        echo -e "${GREEN}Daemon berhasil dijalankan.${NC}"
     fi
 }
 

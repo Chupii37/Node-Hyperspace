@@ -40,7 +40,8 @@ echo -e "${GREEN}Sistem berhasil diperbarui.${NC}"
 # Meminta input private key dan menyimpannya
 get_private_key() {
   echo -e "${CYAN}Silakan masukkan private key...${NC}"
-  read -p "Masukkan private key: " private_key
+  read -s -p "Masukkan private key: " private_key
+  echo -e "\n"  # Newline after input for clarity
   echo -e "$private_key" > ./my.pem
   chmod 600 ./my.pem
   echo -e "${GREEN}Private key telah disimpan dengan nama my.pem dan hak akses sudah diatur.${NC}"
@@ -88,14 +89,25 @@ pull_and_run_docker() {
     fi
     echo -e "${GREEN}Kontainer Docker berhasil dijalankan.${NC}"
 
-    # Masuk ke dalam kontainer dan mulai daemon
+    # Masuk ke dalam kontainer dan mulai daemon dengan timeout 20 detik
     echo -e "${BLUE}Masuk ke dalam kontainer dan memulai daemon...${NC}"
     docker exec -it aios-container bash -c "
       echo 'Memulai daemon...'
       /app/aios-cli start
-      /app/aios-cli models available
-      /app/aios-cli models add hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf
     "
+
+    # Menggunakan timeout untuk menunggu hingga 20 detik
+    echo -e "${CYAN}Menunggu daemon berjalan selama 20 detik...${NC}"
+    timeout 20 docker exec -it aios-container /app/aios-cli status
+
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}❌ Daemon tidak berjalan, menghentikan dan memulai ulang...${NC}"
+        # Membunuh proses daemon dan memulai ulang
+        docker exec -it aios-container /app/aios-cli kill
+        sleep 2  # Tunggu sebentar sebelum memulai ulang
+        echo -e "${BLUE}Memulai ulang daemon...${NC}"
+        docker exec -it aios-container /app/aios-cli start
+    fi
 
     # Menunggu konfirmasi pengguna untuk menjalankan infer
     echo -e "${CYAN}Apakah Anda ingin menjalankan infer dengan model yang telah diinstal? (yes/no)${NC}"

@@ -35,7 +35,7 @@ bash Logo.sh
 
 get_private_key() {
   echo -e "${CYAN}Silakan masukkan private key...${NC}"
-  read -s -p "Masukkan private key: " private_key
+  read -p "Masukkan private key: " private_key  # Removed -s to make input visible
   echo -e "\n"
   echo -e "$private_key" > /root/my.pem
   chmod 600 /root/my.pem

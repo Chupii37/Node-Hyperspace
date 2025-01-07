@@ -121,10 +121,11 @@ pull_and_run_docker() {
     fi
     echo -e "${GREEN}Infer berhasil dijalankan.${NC}"
 
-    /app/aios-cli hive import-keys ./my.pem
-    /app/aios-cli hive login
-    /app/aios-cli hive select-tier 4
-    /app/aios-cli hive connect
+    # Menggunakan private key untuk login ke Hive
+    docker exec -it aios-container /app/aios-cli hive import-keys ./my.pem
+    docker exec -it aios-container /app/aios-cli hive login
+    docker exec -it aios-container /app/aios-cli hive select-tier 4
+    docker exec -it aios-container /app/aios-cli hive connect
 
     echo -e "${CYAN}Apakah Anda ingin menjalankan infer dengan Hive menggunakan model yang telah diinstal? (yes/no)${NC}"
     read -p "Masukkan jawaban: " answer

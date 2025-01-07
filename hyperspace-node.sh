@@ -6,7 +6,6 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'  # Reset
 
-# Menunggu konfirmasi dari pengguna untuk melanjutkan
 wait_for_user() {
   read -p "Apakah Anda ingin melanjutkan? (yes/no): " answer
   if [[ "$answer" != "yes" ]]; then
@@ -15,7 +14,6 @@ wait_for_user() {
   fi
 }
 
-# Memastikan sistem sudah terupdate
 echo -e "${BLUE}Memastikan sistem sudah terupdate...${NC}"
 apt update -y && apt upgrade -y
 if [[ $? -ne 0 ]]; then
@@ -24,10 +22,8 @@ if [[ $? -ne 0 ]]; then
 fi
 echo -e "${GREEN}Sistem berhasil diperbarui.${NC}"
 
-# Menunggu konfirmasi dari pengguna untuk melanjutkan
 wait_for_user
 
-# Menampilkan Logo.sh
 echo -e "${BLUE}📥 Mengunduh dan memeriksa Logo.sh...${NC}"
 wget https://raw.githubusercontent.com/Chupii37/Chupii-Node/refs/heads/main/Logo.sh -O Logo.sh
 if [[ $? -ne 0 ]]; then
@@ -46,7 +42,6 @@ get_private_key() {
   echo -e "${GREEN}Private key telah disimpan dengan nama my.pem dan hak akses sudah diatur.${NC}"
 }
 
-# Mengecek dan menginstal Docker jika diperlukan
 check_and_install_docker() {
   if ! command -v docker &> /dev/null; then
     echo -e "${RED}Docker tidak ditemukan. Menginstal Docker...${NC}"
@@ -67,7 +62,6 @@ check_and_install_docker() {
   fi
 }
 
-# Memulai kontainer Docker
 start_container() {
     echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
     docker run -d --name aios-container -v /root:/root kartikhyper/aios /app/aios-cli start
@@ -78,13 +72,11 @@ start_container() {
     echo -e "${GREEN}Kontainer berhasil dijalankan.${NC}"
 }
 
-# Menunggu kontainer dan daemon berjalan
 wait_for_container_to_start() {
     echo -e "${CYAN}Menunggu kontainer Docker untuk memulai (60 detik)...${NC}"
-    sleep 60  # Tunggu 1 menit untuk kontainer memulai daemon
+    sleep 60
 }
 
-# Memastikan daemon berjalan dengan benar
 check_daemon_status() {
     echo -e "${BLUE}Memeriksa status daemon di dalam kontainer...${NC}"
     docker exec -it aios-container /app/aios-cli status
@@ -99,13 +91,11 @@ check_daemon_status() {
     fi
 }
 
-# Menginstal model lokal
 install_local_model() {
     echo -e "${BLUE}Menginstal model lokal...${NC}"
     docker exec -it aios-container /app/aios-cli models add hf:TheBloke/Mistral-7B-Instruct-v0.1-GGUF:mistral-7b-instruct-v0.1.Q4_K_S.gguf
 }
 
-# Menjalankan infer dengan model yang telah diinstal
 run_infer() {
     echo -e "${CYAN}Apakah Anda ingin menjalankan infer dengan model yang telah diinstal? (yes/no)${NC}"
     read -p "Masukkan jawaban: " answer
@@ -121,23 +111,17 @@ run_infer() {
         exit 1
     fi
 
-    # Polling untuk memastikan infer selesai
     echo -e "${CYAN}Menunggu infer selesai...${NC}"
     while true; do
-        # Periksa apakah ada proses infer yang aktif (atau periksa log/error yang menunjukkan selesai)
-        infer_status=$(docker exec -it aios-container /app/aios-cli status | grep -i "completed")  # Sesuaikan dengan output yang menunjukkan infer selesai
+        infer_status=$(docker exec -it aios-container /app/aios-cli status | grep -i "completed")
         if [[ -n "$infer_status" ]]; then
-            break  # Keluar dari loop jika infer selesai
+            break
         fi
-        # Jika belum selesai, tunggu 10 detik sebelum mencoba lagi
-        echo -e "${CYAN}Infer masih berjalan. Menunggu 10 detik...${NC}"
-        sleep 10
     done
 
     echo -e "${GREEN}Infer berhasil dijalankan.${NC}"
 }
 
-# Menggunakan private key untuk login ke Hive
 hive_login() {
     docker exec -it aios-container /app/aios-cli hive import-keys /root/my.pem
     docker exec -it aios-container /app/aios-cli hive login
@@ -145,7 +129,6 @@ hive_login() {
     docker exec -it aios-container /app/aios-cli hive connect
 }
 
-# Menjalankan infer Hive dengan model yang telah diinstal
 run_hive_infer() {
     echo -e "${CYAN}Apakah Anda ingin menjalankan infer Hive menggunakan model yang telah diinstal? (yes/no)${NC}"
     read -p "Masukkan jawaban: " answer
@@ -161,23 +144,17 @@ run_hive_infer() {
         exit 1
     fi
 
-    # Polling untuk memastikan infer Hive selesai
     echo -e "${CYAN}Menunggu infer Hive selesai...${NC}"
     while true; do
-        # Periksa apakah ada proses infer Hive yang aktif (atau periksa log/error yang menunjukkan selesai)
-        hive_status=$(docker exec -it aios-container /app/aios-cli hive status | grep -i "completed")  # Sesuaikan dengan output yang menunjukkan infer selesai
+        hive_status=$(docker exec -it aios-container /app/aios-cli hive status | grep -i "completed")
         if [[ -n "$hive_status" ]]; then
-            break  # Keluar dari loop jika infer Hive selesai
+            break
         fi
-        # Jika belum selesai, tunggu 10 detik sebelum mencoba lagi
-        echo -e "${CYAN}Infer Hive masih berjalan. Menunggu 10 detik...${NC}"
-        sleep 10
     done
 
     echo -e "${GREEN}Infer Hive berhasil dijalankan.${NC}"
 }
 
-# Memeriksa multiplier dan poin Hive
 check_hive_points() {
     echo -e "${BLUE}Memeriksa multiplier dan poin Hive...${NC}"
     docker exec -it aios-container /app/aios-cli hive points
@@ -188,13 +165,11 @@ check_hive_points() {
     echo -e "${GREEN}Poin dan multiplier Hive berhasil diperiksa.${NC}"
 }
 
-# Mendapatkan kunci yang sedang login saat ini di Hive
 get_current_signed_in_keys() {
     echo -e "${BLUE}Mendapatkan kunci yang sedang login saat ini...${NC}"
     docker exec -it aios-container /app/aios-cli hive whoami
 }
 
-# Langkah-langkah utama
 check_and_install_docker
 get_private_key
 start_container

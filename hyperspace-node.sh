@@ -6,162 +6,179 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'  # Reset
 
+LOG_FILE="/root/script_progress.log"
+
+# Helper function to log messages and steps
+log_message() {
+    echo -e "$1"
+    echo "$(date): $1" >> $LOG_FILE
+}
+
 wait_for_user() {
   read -p "Apakah Anda ingin melanjutkan? (yes/no): " answer
   if [[ "$answer" != "yes" ]]; then
-    echo -e "${RED}❌ Proses dibatalkan.${NC}"
+    log_message "❌ Proses dibatalkan."
     exit 1
   fi
 }
 
-echo -e "${BLUE}Memastikan sistem sudah terupdate...${NC}"
-apt update -y && apt upgrade -y
+# Retry function
+retry() {
+    local n=1
+    local max=5
+    local delay=10
+    while true; do
+        "$@" && return 0
+        if (( n == max )); then
+            return 1
+        else
+            echo "Attempt $n/$max failed! Retrying in $delay seconds..."
+            sleep $delay
+        fi
+        ((n++))
+    done
+}
+
+# Ensure system is updated
+log_message "${BLUE}Memastikan sistem sudah terupdate...${NC}"
+retry apt update -y && apt upgrade -y
 if [[ $? -ne 0 ]]; then
-    echo -e "${RED}❌ Gagal memperbarui sistem.${NC}"
+    log_message "❌ Gagal memperbarui sistem."
     exit 1
 fi
-echo -e "${GREEN}Sistem berhasil diperbarui.${NC}"
+log_message "${GREEN}Sistem berhasil diperbarui.${NC}"
 
 wait_for_user
 
-echo -e "${BLUE}📥 Mengunduh dan memeriksa Logo.sh...${NC}"
-wget https://raw.githubusercontent.com/Chupii37/Chupii-Node/refs/heads/main/Logo.sh -O Logo.sh
+# Download and check Logo.sh
+log_message "${BLUE}📥 Mengunduh dan memeriksa Logo.sh...${NC}"
+retry wget https://raw.githubusercontent.com/Chupii37/Chupii-Node/refs/heads/main/Logo.sh -O Logo.sh
 if [[ $? -ne 0 ]]; then
-    echo -e "${RED}❌ Gagal mengunduh Logo.sh.${NC}"
+    log_message "❌ Gagal mengunduh Logo.sh."
     exit 1
 fi
 cat Logo.sh
 bash Logo.sh
 
+# Function to get the private key
 get_private_key() {
-  echo -e "${CYAN}Silakan masukkan private key...${NC}"
-  read -p "Masukkan private key: " private_key  # Removed -s to make input visible
-  echo -e "\n"
+  log_message "${CYAN}Silakan masukkan private key...${NC}"
+  read -p "Masukkan private key: " private_key
   echo -e "$private_key" > /root/my.pem
   chmod 600 /root/my.pem
-  echo -e "${GREEN}Private key telah disimpan dengan nama my.pem dan hak akses sudah diatur.${NC}"
+  log_message "${GREEN}Private key telah disimpan dengan nama my.pem dan hak akses sudah diatur.${NC}"
 }
 
+# Check and install Docker
 check_and_install_docker() {
   if ! command -v docker &> /dev/null; then
-    echo -e "${RED}Docker tidak ditemukan. Menginstal Docker...${NC}"
-    apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+    log_message "${RED}Docker tidak ditemukan. Menginstal Docker...${NC}"
+    retry apt-get install -y apt-transport-https ca-certificates curl software-properties-common
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - 
     add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-    apt update -y
-    apt install -y docker-ce
+    retry apt update -y
+    retry apt install -y docker-ce
     systemctl start docker
     systemctl enable docker
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Gagal menginstal Docker.${NC}"
+        log_message "❌ Gagal menginstal Docker."
         exit 1
     fi
-    echo -e "${GREEN}Docker berhasil diinstal dan dijalankan.${NC}"
+    log_message "${GREEN}Docker berhasil diinstal dan dijalankan.${NC}"
   else
-    echo -e "${GREEN}Docker sudah terinstal!${NC}"
+    log_message "${GREEN}Docker sudah terinstal!${NC}"
   fi
 }
 
+# Start Docker container
 start_container() {
-    echo -e "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
-    docker run -d --name aios-container -v /root:/root kartikhyper/aios /app/aios-cli start
+    log_message "${BLUE}Menjalankan kontainer Docker kartikhyper/aios...${NC}"
+    retry docker run -d --name aios-container -v /root:/root kartikhyper/aios /app/aios-cli start
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Gagal menjalankan kontainer.${NC}"
+        log_message "❌ Gagal menjalankan kontainer."
         exit 1
     fi
-    echo -e "${GREEN}Kontainer berhasil dijalankan.${NC}"
+    log_message "${GREEN}Kontainer berhasil dijalankan.${NC}"
 }
 
 wait_for_container_to_start() {
-    echo -e "${CYAN}Menunggu kontainer Docker untuk memulai (60 detik)...${NC}"
+    log_message "${CYAN}Menunggu kontainer Docker untuk memulai (60 detik)...${NC}"
     sleep 60
 }
 
+# Check daemon status
 check_daemon_status() {
-    echo -e "${BLUE}Memeriksa status daemon di dalam kontainer...${NC}"
+    log_message "${BLUE}Memeriksa status daemon di dalam kontainer...${NC}"
     docker exec -it aios-container /app/aios-cli status
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Daemon tidak berjalan, mencoba untuk memulai ulang...${NC}"
+        log_message "${RED}❌ Daemon tidak berjalan, mencoba untuk memulai ulang...${NC}"
         docker exec -it aios-container /app/aios-cli kill
         sleep 2
         docker exec -it aios-container /app/aios-cli start
-        echo -e "${GREEN}Daemon berhasil dimulai ulang.${NC}"
+        log_message "${GREEN}Daemon berhasil dimulai ulang.${NC}"
     else
-        echo -e "${GREEN}Daemon sudah berjalan.${NC}"
+        log_message "${GREEN}Daemon sudah berjalan.${NC}"
     fi
 }
 
+# Install local model
 install_local_model() {
-    echo -e "${BLUE}Menginstal model lokal...${NC}"
+    log_message "${BLUE}Menginstal model lokal...${NC}"
     docker exec -it aios-container /app/aios-cli models add hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf
 }
 
+# Run inference
 run_infer() {
-    echo -e "${CYAN}Apakah Anda ingin menjalankan infer dengan model yang telah diinstal? (yes/no)${NC}"
+    log_message "${CYAN}Apakah Anda ingin menjalankan infer dengan model yang telah diinstal? (yes/no)${NC}"
     read -p "Masukkan jawaban: " answer
     if [[ "$answer" != "yes" ]]; then
-        echo -e "${RED}❌ Proses infer dibatalkan.${NC}"
+        log_message "❌ Proses infer dibatalkan."
         exit 1
     fi
-
-    echo -e "${BLUE}Menjalankan infer menggunakan model yang telah diinstal...${NC}"
-    docker exec -it aios-container /app/aios-cli infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Explain a simple HTTP server in Rust."
+    log_message "${BLUE}Menjalankan infer menggunakan model yang telah diinstal...${NC}"
+    retry docker exec -it aios-container /app/aios-cli infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Explain a simple HTTP server in Rust."
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Gagal menjalankan infer.${NC}"
+        log_message "❌ Gagal menjalankan infer."
         exit 1
     fi
-
-    # Wait for 5 seconds after stats output before continuing
-    echo -e "${CYAN}Menunggu infer selesai...${NC}"
-    sleep 5  # Added 5 seconds delay after stats
-
-    echo -e "${GREEN}Infer berhasil dijalankan.${NC}"
+    log_message "${GREEN}Infer berhasil dijalankan.${NC}"
 }
 
-hive_login() {
-    docker exec -it aios-container /app/aios-cli hive import-keys /root/my.pem
-    docker exec -it aios-container /app/aios-cli hive login
-    docker exec -it aios-container /app/aios-cli hive select-tier 4
-    docker exec -it aios-container /app/aios-cli hive connect
-}
-
+# Run Hive inference
 run_hive_infer() {
-    echo -e "${CYAN}Apakah Anda ingin menjalankan infer Hive menggunakan model yang telah diinstal? (yes/no)${NC}"
+    log_message "${CYAN}Apakah Anda ingin menjalankan infer Hive menggunakan model yang telah diinstal? (yes/no)${NC}"
     read -p "Masukkan jawaban: " answer
     if [[ "$answer" != "yes" ]]; then
-        echo -e "${RED}❌ Proses infer Hive dibatalkan.${NC}"
+        log_message "❌ Proses infer Hive dibatalkan."
         exit 1
     fi
-
-    echo -e "${BLUE}Menjalankan infer Hive menggunakan model yang telah diinstal...${NC}"
-    docker exec -it aios-container /app/aios-cli hive infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Explain a simple HTTP server in Rust."
+    log_message "${BLUE}Menjalankan infer Hive menggunakan model yang telah diinstal...${NC}"
+    retry docker exec -it aios-container /app/aios-cli hive infer --model hf:TheBloke/phi-2-GGUF:phi-2.Q4_K_M.gguf --prompt "Explain a simple HTTP server in Rust."
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Gagal menjalankan infer Hive.${NC}"
+        log_message "❌ Gagal menjalankan infer Hive."
         exit 1
     fi
-
-    # Wait for 5 seconds after Hive infer completion before continuing
-    echo -e "${CYAN}Menunggu infer Hive selesai...${NC}"
-    sleep 5  # Added 5 seconds delay after Hive inference
-
-    echo -e "${GREEN}Infer Hive berhasil dijalankan.${NC}"
+    log_message "${GREEN}Infer Hive berhasil dijalankan.${NC}"
 }
 
+# Function to check hive points
 check_hive_points() {
-    echo -e "${BLUE}Memeriksa multiplier dan poin Hive...${NC}"
+    log_message "${BLUE}Memeriksa multiplier dan poin Hive...${NC}"
     docker exec -it aios-container /app/aios-cli hive points
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Gagal memeriksa multiplier dan poin Hive.${NC}"
+        log_message "❌ Gagal memeriksa multiplier dan poin Hive."
         exit 1
     fi
-    echo -e "${GREEN}Poin dan multiplier Hive berhasil diperiksa.${NC}"
+    log_message "${GREEN}Poin dan multiplier Hive berhasil diperiksa.${NC}"
 }
 
+# Function to check currently signed-in keys
 get_current_signed_in_keys() {
-    echo -e "${BLUE}Mendapatkan kunci yang sedang login saat ini...${NC}"
+    log_message "${BLUE}Mendapatkan kunci yang sedang login saat ini...${NC}"
     docker exec -it aios-container /app/aios-cli hive whoami
 }
 
+# Main script flow
 check_and_install_docker
 get_private_key
 start_container
@@ -169,9 +186,8 @@ wait_for_container_to_start
 check_daemon_status
 install_local_model
 run_infer
-hive_login
 run_hive_infer
 check_hive_points
 get_current_signed_in_keys
 
-echo -e "${GREEN}Semua langkah berhasil dilakukan!${NC}"
+log_message "${GREEN}Semua langkah berhasil dilakukan!${NC}"

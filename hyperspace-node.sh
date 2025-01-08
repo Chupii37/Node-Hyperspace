@@ -149,7 +149,7 @@ hive_login() {
     log_message "${CYAN}Melakukan login ke Hive...${NC}"
     docker exec -it aios-container /app/aios-cli hive import-keys /root/my.pem
     docker exec -it aios-container /app/aios-cli hive login
-    docker exec -it aios-container /app/aios-cli hive select-tier 4
+    docker exec -it aios-container /app/aios-cli hive select-tier 5
     docker exec -it aios-container /app/aios-cli hive connect
     log_message "${GREEN}Login Hive berhasil dilakukan.${NC}"
 }

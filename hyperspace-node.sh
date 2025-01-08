@@ -144,6 +144,16 @@ run_infer() {
     log_message "${GREEN}Infer berhasil dijalankan.${NC}"
 }
 
+# Hive login step (import private key and login)
+hive_login() {
+    log_message "${CYAN}Melakukan login ke Hive...${NC}"
+    docker exec -it aios-container /app/aios-cli hive import-keys /root/my.pem
+    docker exec -it aios-container /app/aios-cli hive login
+    docker exec -it aios-container /app/aios-cli hive select-tier 4
+    docker exec -it aios-container /app/aios-cli hive connect
+    log_message "${GREEN}Login Hive berhasil dilakukan.${NC}"
+}
+
 # Run Hive inference
 run_hive_infer() {
     log_message "${CYAN}Apakah Anda ingin menjalankan infer Hive menggunakan model yang telah diinstal? (yes/no)${NC}"
@@ -186,6 +196,7 @@ wait_for_container_to_start
 check_daemon_status
 install_local_model
 run_infer
+hive_login  # Added this part to ensure Hive login
 run_hive_infer
 check_hive_points
 get_current_signed_in_keys

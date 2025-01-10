@@ -16,7 +16,7 @@ Go to Hyperspace Node web site https://node.hyper.space then copy and save priva
 
 Run With Docker
 ```bash
-   curl -O https://raw.githubusercontent.com/Chupii37/Hyperscpace/refs/heads/main/hyperspace-node.sh && chmod +x hyperspace-node.sh && ./hyperspace-node.sh
+   curl -O https://raw.githubusercontent.com/Chupii37/Node-Hyperspace/refs/heads/main/hyperspace-node.sh && chmod +x hyperspace-node.sh && ./hyperspace-node.sh
 ```
 ➖Just enter your private key
 

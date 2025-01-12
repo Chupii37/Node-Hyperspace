@@ -151,7 +151,6 @@ while true; do
     log_message "${CYAN}Restarting process every 1 hour...${RESET}"
 
     docker exec -it aios-container /app/aios-cli kill
-    docker exec -it aios-container /app/aios-cli start
     
     docker exec -it aios-container /app/aios-cli status
     if [[ $? -ne 0 ]]; then

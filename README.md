@@ -22,6 +22,21 @@ Run With Docker
 
 ➖Done 
 
+## Useful commands
+Check Log
+```bash
+docker logs -f aios-container
+ ```
+
+Check Point
+```bash
+docker exec -it aios-container /app/aios-cli hive points
+ ```
+Check Private Key
+```bash
+docker exec -it aios-container /app/aios-cli hive whoami
+ ```
+
 ## After End Of Project
 Stop the Docker Container
 ```bash
@@ -37,3 +52,11 @@ Remove the Docker Image
 ```bash
 docker rmi kartikhyper/aios
  ```
+Remove Folder
+```bash
+sudo rm -rf /root/.cache/hyperspace/
+```
+
+```bash
+sudo rm -rf /root/.config/hyperspace/
+```

@@ -20,10 +20,6 @@ curl -O https://raw.githubusercontent.com/Chupii37/Node-Hyperspace/refs/heads/ma
 ```
 ➖Just enter your private key
 
-➖If you have seen a comment : "Cycle complete. Waiting 1 hour..."
-
-Press CTRL + C
-
 ➖Done 
 
 ## Useful commands
